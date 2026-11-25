@@ -606,6 +606,23 @@
       font-weight: 500;
     }
 
+    thead th.diff-col-head {
+      background: #fef3c7;
+      color: #92400e;
+      border-bottom-color: #f59e0b;
+    }
+
+    .th-diff-cnt {
+      display: inline-block;
+      margin-left: 4px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #d97706;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
     tbody td {
       border-bottom: 1px solid var(--border);
       border-right: 1px solid var(--border);
@@ -850,6 +867,9 @@
 
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <input type="text" id="rowSearch" placeholder="ค้นหาในผลลัพธ์..." style="width:190px;" />
+            <label style="display:inline-flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer;" title="ย้ายคอลัมน์ที่มีค่าต่างมาแสดงด้านซ้ายสุดของตาราง">
+              <input type="checkbox" id="optPinDiffCols" checked /> ดึงคอลัมน์ที่ต่างขึ้นหน้า
+            </label>
             <label style="display:inline-flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer;">
               <input type="checkbox" id="optShowIgnored" /> แสดงคอลัมน์ที่ติ๊กออก
             </label>
@@ -980,6 +1000,7 @@
         cntMatch: document.getElementById('cntMatch'),
         cntAll: document.getElementById('cntAll'),
         rowSearch: document.getElementById('rowSearch'),
+        optPinDiffCols: document.getElementById('optPinDiffCols'),
         optShowIgnored: document.getElementById('optShowIgnored'),
         btnExportCsv: document.getElementById('btnExportCsv'),
         resultHead: document.getElementById('resultHead'),
@@ -1404,7 +1425,10 @@
             list.push(i);
           }
 
-          // Process all signatures in A
+          const remA = [];
+          const remB = [];
+
+          // Pass 1: Exact multiset match on all selected columns
           for (const [sig, listA] of mapA.entries()) {
             const listB = mapB.get(sig);
             if (listB) {
@@ -1419,54 +1443,20 @@
                   diffCols: null
                 });
               }
-              for (let k = matchCnt; k < listA.length; k++) {
-                diffRows.push({
-                  type: 'onlyA',
-                  lineA: listA[k] + lineOffset,
-                  lineB: null,
-                  rowA: rowsA[listA[k]],
-                  rowB: null,
-                  diffCols: null
-                });
-              }
-              for (let k = matchCnt; k < listB.length; k++) {
-                diffRows.push({
-                  type: 'onlyB',
-                  lineA: null,
-                  lineB: listB[k] + lineOffset,
-                  rowA: null,
-                  rowB: rowsB[listB[k]],
-                  diffCols: null
-                });
-              }
+              for (let k = matchCnt; k < listA.length; k++) remA.push(listA[k]);
+              for (let k = matchCnt; k < listB.length; k++) remB.push(listB[k]);
               mapB.delete(sig);
             } else {
-              for (let k = 0; k < listA.length; k++) {
-                diffRows.push({
-                  type: 'onlyA',
-                  lineA: listA[k] + lineOffset,
-                  lineB: null,
-                  rowA: rowsA[listA[k]],
-                  rowB: null,
-                  diffCols: null
-                });
-              }
+              for (let k = 0; k < listA.length; k++) remA.push(listA[k]);
             }
           }
 
-          // Remaining signatures only in B
           for (const listB of mapB.values()) {
-            for (let k = 0; k < listB.length; k++) {
-              diffRows.push({
-                type: 'onlyB',
-                lineA: null,
-                lineB: listB[k] + lineOffset,
-                rowA: null,
-                rowB: rowsB[listB[k]],
-                diffCols: null
-              });
-            }
+            for (let k = 0; k < listB.length; k++) remB.push(listB[k]);
           }
+
+          // Pass 2: Smart pairing of unmatched rows so cell-level diffs (e.g. CRT_TMS) are highlighted
+          smartPairUnmatched(remA, remB, rowsA, rowsB, selectedCols, norm, lineOffset, diffRows, colDiffCounts);
         } else if (state.mode === 'key') {
           const mapA = new Map();
           for (let i = 0; i < rowsA.length; i++) {
@@ -1598,6 +1588,196 @@
         return diffCols;
       }
 
+      // Smart pairing for unmatched rows in multiset mode so users see exact differing cells (e.g. CRT_TMS)
+      function smartPairUnmatched(remA, remB, rowsA, rowsB, selectedCols, norm, lineOffset, diffRows, colDiffCounts) {
+        if (remA.length === 0 || remB.length === 0 || selectedCols.length < 2) {
+          for (const idx of remA) {
+            diffRows.push({ type: 'onlyA', lineA: idx + lineOffset, lineB: null, rowA: rowsA[idx], rowB: null, diffCols: null });
+          }
+          for (const idx of remB) {
+            diffRows.push({ type: 'onlyB', lineA: null, lineB: idx + lineOffset, rowA: null, rowB: rowsB[idx], diffCols: null });
+          }
+          return;
+        }
+
+        // Precompute column distinctness (information weight) across full dataset so constant/blank columns don't cause false pairings
+        const colStats = selectedCols.map((col) => {
+          const distinctAll = new Set();
+          const sampleStepA = Math.max(1, Math.floor(rowsA.length / 2000));
+          for (let i = 0; i < rowsA.length; i += sampleStepA) {
+            const v = col.idxA >= 0 ? norm(rowsA[i][col.idxA] ?? '') : '';
+            distinctAll.add(v);
+          }
+          const sampleStepB = Math.max(1, Math.floor(rowsB.length / 2000));
+          for (let i = 0; i < rowsB.length; i += sampleStepB) {
+            const v = col.idxB >= 0 ? norm(rowsB[i][col.idxB] ?? '') : '';
+            distinctAll.add(v);
+          }
+          // Multiset overlap ratio between remA and remB for this column
+          const freqA = new Map();
+          for (let i = 0; i < remA.length; i++) {
+            const v = col.idxA >= 0 ? norm(rowsA[remA[i]][col.idxA] ?? '') : '';
+            freqA.set(v, (freqA.get(v) || 0) + 1);
+          }
+          let overlapCnt = 0;
+          for (let i = 0; i < remB.length; i++) {
+            const v = col.idxB >= 0 ? norm(rowsB[remB[i]][col.idxB] ?? '') : '';
+            const c = freqA.get(v) || 0;
+            if (c > 0) {
+              overlapCnt++;
+              freqA.set(v, c - 1);
+            }
+          }
+          const denom = Math.max(remA.length, remB.length);
+          const overlap = denom > 0 ? overlapCnt / denom : 0;
+          const distinct = distinctAll.size;
+          const weight = distinct <= 1 ? 0 : Math.log2(distinct);
+          return { col, overlap, distinct, weight };
+        });
+
+        const totalWeight = colStats.reduce((s, cs) => s + cs.weight, 0);
+        let curA = remA;
+        let curB = remB;
+
+        // Helper: pair curA and curB by exact match on a subset of columns
+        const pairByColumns = (colsToMatch) => {
+          if (colsToMatch.length === 0 || curA.length === 0 || curB.length === 0) return;
+          // Ensure matching columns carry real identifying weight (avoid pairing purely on constant/empty columns)
+          const matchWeight = colsToMatch.reduce((s, c) => {
+            const st = colStats.find((x) => x.col === c);
+            return s + (st ? st.weight : 0);
+          }, 0);
+          if (totalWeight > 0 && matchWeight / totalWeight < 0.5) return;
+
+          const mA = new Map();
+          for (let i = 0; i < curA.length; i++) {
+            const rIdx = curA[i];
+            const sig = buildSignature(rowsA[rIdx], colsToMatch, 'A', norm);
+            let list = mA.get(sig);
+            if (!list) { list = []; mA.set(sig, list); }
+            list.push(rIdx);
+          }
+          const mB = new Map();
+          for (let i = 0; i < curB.length; i++) {
+            const rIdx = curB[i];
+            const sig = buildSignature(rowsB[rIdx], colsToMatch, 'B', norm);
+            let list = mB.get(sig);
+            if (!list) { list = []; mB.set(sig, list); }
+            list.push(rIdx);
+          }
+
+          const nextA = [];
+          const nextB = [];
+          for (const [sig, listA] of mA.entries()) {
+            const listB = mB.get(sig);
+            if (listB) {
+              const pairCnt = Math.min(listA.length, listB.length);
+              for (let k = 0; k < pairCnt; k++) {
+                const rA = rowsA[listA[k]];
+                const rB = rowsB[listB[k]];
+                const dCols = compareRowPair(rA, rB, selectedCols, norm, colDiffCounts);
+                diffRows.push({
+                  type: dCols.size === 0 ? 'matched' : 'modified',
+                  lineA: listA[k] + lineOffset,
+                  lineB: listB[k] + lineOffset,
+                  rowA: rA,
+                  rowB: rB,
+                  diffCols: dCols
+                });
+              }
+              for (let k = pairCnt; k < listA.length; k++) nextA.push(listA[k]);
+              for (let k = pairCnt; k < listB.length; k++) nextB.push(listB[k]);
+              mB.delete(sig);
+            } else {
+              for (let k = 0; k < listA.length; k++) nextA.push(listA[k]);
+            }
+          }
+          for (const listB of mB.values()) {
+            for (let k = 0; k < listB.length; k++) nextB.push(listB[k]);
+          }
+          curA = nextA;
+          curB = nextB;
+        };
+
+        // Step 2a: Exact match on stable/high-overlap columns (instantly pairs cases like CRT_TMS or ID + CRT_TMS in O(N))
+        for (const threshold of [0.98, 0.9, 0.75]) {
+          if (curA.length === 0 || curB.length === 0) break;
+          const stableCols = colStats.filter((cs) => cs.overlap >= threshold).map((cs) => cs.col);
+          if (stableCols.length > 0 && stableCols.length < selectedCols.length) {
+            pairByColumns(stableCols);
+          }
+        }
+
+        // Step 2b: Leave-1-column-out exact match (handles rows where different rows differ in different single columns)
+        if (curA.length > 0 && curB.length > 0 && selectedCols.length >= 2 && Math.max(curA.length, curB.length) <= 20000) {
+          const orderedSkip = [...colStats].sort((a, b) => a.overlap - b.overlap);
+          for (const cs of orderedSkip) {
+            if (curA.length === 0 || curB.length === 0) break;
+            const subset = selectedCols.filter((c) => c !== cs.col);
+            pairByColumns(subset);
+          }
+        }
+
+        // Step 2c: Weighted best-similarity pairing for small leftover sets (handles rows differing in 2+ arbitrary columns)
+        if (curA.length > 0 && curB.length > 0 && curA.length * curB.length <= 400000 && totalWeight > 0) {
+          const normA = curA.map((rIdx) => selectedCols.map((c) => (c.idxA >= 0 ? norm(rowsA[rIdx][c.idxA] ?? '') : '')));
+          const normB = curB.map((rIdx) => selectedCols.map((c) => (c.idxB >= 0 ? norm(rowsB[rIdx][c.idxB] ?? '') : '')));
+          const weights = colStats.map((cs) => cs.weight);
+
+          const candidates = [];
+          for (let i = 0; i < curA.length; i++) {
+            let bestJ = -1;
+            let bestScore = 0;
+            for (let j = 0; j < curB.length; j++) {
+              let score = 0;
+              for (let c = 0; c < selectedCols.length; c++) {
+                if (weights[c] > 0 && normA[i][c] === normB[j][c]) score += weights[c];
+              }
+              if (score > bestScore) {
+                bestScore = score;
+                bestJ = j;
+              }
+            }
+            if (bestJ >= 0 && bestScore / totalWeight >= 0.6) {
+              candidates.push({ i, j: bestJ, score: bestScore });
+            }
+          }
+
+          candidates.sort((x, y) => y.score - x.score);
+          const usedA = new Set();
+          const usedB = new Set();
+          for (const cand of candidates) {
+            if (usedA.has(cand.i) || usedB.has(cand.j)) continue;
+            usedA.add(cand.i);
+            usedB.add(cand.j);
+            const idxA = curA[cand.i];
+            const idxB = curB[cand.j];
+            const rA = rowsA[idxA];
+            const rB = rowsB[idxB];
+            const dCols = compareRowPair(rA, rB, selectedCols, norm, colDiffCounts);
+            diffRows.push({
+              type: dCols.size === 0 ? 'matched' : 'modified',
+              lineA: idxA + lineOffset,
+              lineB: idxB + lineOffset,
+              rowA: rA,
+              rowB: rB,
+              diffCols: dCols
+            });
+          }
+
+          curA = curA.filter((_, i) => !usedA.has(i));
+          curB = curB.filter((_, j) => !usedB.has(j));
+        }
+
+        // Truly unmatched rows remain onlyA / onlyB
+        for (const idx of curA) {
+          diffRows.push({ type: 'onlyA', lineA: idx + lineOffset, lineB: null, rowA: rowsA[idx], rowB: null, diffCols: null });
+        }
+        for (const idx of curB) {
+          diffRows.push({ type: 'onlyB', lineA: null, lineB: idx + lineOffset, rowA: null, rowB: rowsB[idx], diffCols: null });
+        }
+      }
+
       // ---------- Render Results ----------
       function renderResults() {
         el.resultSection.classList.remove('hidden');
@@ -1654,7 +1834,7 @@
           <div class="stat-pill"><div class="num">${formatNum(state.parsedA.rows.length)}</div><div class="lbl">แถวไฟล์ A</div></div>
           <div class="stat-pill"><div class="num">${formatNum(state.parsedB.rows.length)}</div><div class="lbl">แถวไฟล์ B</div></div>
           <div class="stat-pill"><div class="num" style="color:var(--success);">${formatNum(matched)}</div><div class="lbl">ตรงกัน</div></div>
-          ${state.mode !== 'multiset' ? `<div class="stat-pill"><div class="num" style="color:var(--warn);">${formatNum(modified)}</div><div class="lbl">ค่าไม่ตรง</div></div>` : ''}
+          <div class="stat-pill"><div class="num" style="color:var(--warn);">${formatNum(modified)}</div><div class="lbl">ค่าไม่ตรง</div></div>
           <div class="stat-pill"><div class="num" style="color:var(--only-a-text);">${formatNum(onlyA)}</div><div class="lbl">เฉพาะ A</div></div>
           <div class="stat-pill"><div class="num" style="color:var(--only-b-text);">${formatNum(onlyB)}</div><div class="lbl">เฉพาะ B</div></div>
         `;
@@ -1666,12 +1846,8 @@
         el.cntOnlyB.textContent = formatNum(onlyB);
         el.cntMatch.textContent = formatNum(matched);
         el.cntAll.textContent = formatNum(state.diffRows.length);
-        el.tabModified.classList.toggle('hidden', state.mode === 'multiset');
+        el.tabModified.classList.remove('hidden');
 
-        // If 100% match and currently on 'diff', switch to 'matched' automatically? Keep 'diff' clear or show friendly message.
-        if (state.filter === 'modified' && state.mode === 'multiset') {
-          state.filter = 'diff';
-        }
         syncFilterTabUI();
 
         // Per-column diff summary
@@ -1732,9 +1908,23 @@
         });
       }
 
-      function renderTable() {
+      function getVisibleCols() {
         const showIgnored = el.optShowIgnored.checked;
-        const visibleCols = showIgnored ? state.allColumns : state.allColumns.filter((c) => c.checked);
+        let cols = showIgnored ? [...state.allColumns] : state.allColumns.filter((c) => c.checked);
+        if (el.optPinDiffCols.checked && state.colDiffCounts.size > 0) {
+          cols.sort((a, b) => {
+            const da = state.colDiffCounts.get(a.name) || 0;
+            const db = state.colDiffCounts.get(b.name) || 0;
+            if ((da > 0) !== (db > 0)) return db > 0 ? 1 : -1;
+            if (da !== db) return db - da;
+            return 0;
+          });
+        }
+        return cols;
+      }
+
+      function renderTable() {
+        const visibleCols = getVisibleCols();
 
         // Header
         const headHtml = [
@@ -1743,9 +1933,13 @@
           '<th>บรรทัด A</th>',
           '<th>บรรทัด B</th>',
           ...visibleCols.map((c) => {
-            const cls = c.checked ? '' : ' class="ignored-col"';
+            const diffCnt = state.colDiffCounts.get(c.name) || 0;
+            const cls = !c.checked
+              ? ' class="ignored-col"'
+              : (diffCnt > 0 ? ' class="diff-col-head"' : '');
             const keyMark = (state.mode === 'key' && c.isKey) ? '🔑 ' : '';
-            return `<th${cls}>${keyMark}${escapeHtml(c.name)}</th>`;
+            const diffBadge = diffCnt > 0 ? `<span class="th-diff-cnt">${formatNum(diffCnt)}</span>` : '';
+            return `<th${cls}>${keyMark}${escapeHtml(c.name)}${diffBadge}</th>`;
           }),
           '</tr>'
         ].join('');
@@ -2010,6 +2204,7 @@
         renderTable();
       }, 180));
 
+      el.optPinDiffCols.addEventListener('change', () => renderTable());
       el.optShowIgnored.addEventListener('change', () => renderTable());
       el.btnExportCsv.addEventListener('click', () => exportDiffCsv());
 
