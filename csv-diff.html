@@ -1,0 +1,2032 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSV File Diff — เทียบไฟล์เลือกคอลัมน์ได้</title>
+  <style>
+    :root {
+      --bg: #f4f6fa;
+      --surface: #ffffff;
+      --surface-muted: #f8fafc;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-soft: #eff6ff;
+      --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --success-border: #bbf7d0;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --warn: #d97706;
+      --warn-bg: #fffbeb;
+      --warn-border: #fde68a;
+      --only-a-bg: #fff1f2;
+      --only-a-text: #be123c;
+      --only-b-bg: #ecfdf5;
+      --only-b-text: #047857;
+      --mod-bg: #fffbeb;
+      --mod-cell-bg: #fef3c7;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Thai", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 20px 24px 48px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    header .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px 18px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Buttons */
+    button, .btn {
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 12px;
+      border-radius: 7px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--surface-muted);
+      border-color: #94a3b8;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+    }
+
+    .btn-sm {
+      font-size: 12px;
+      padding: 4px 9px;
+      border-radius: 6px;
+    }
+
+    .btn-accent {
+      background: var(--primary-soft);
+      border-color: #bfdbfe;
+      color: #1d4ed8;
+    }
+
+    .btn-accent:hover:not(:disabled) {
+      background: #dbeafe;
+    }
+
+    /* Drop zones */
+    .upload-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    @media (max-width: 820px) {
+      .upload-grid {
+        grid-template-columns: 1fr;
+      }
+      .swap-wrap {
+        justify-content: center;
+      }
+    }
+
+    .swap-wrap {
+      display: flex;
+      align-items: center;
+    }
+
+    .dropzone {
+      border: 2px dashed var(--border-strong);
+      border-radius: var(--radius);
+      padding: 16px;
+      background: var(--surface-muted);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 108px;
+      position: relative;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .dropzone.loaded {
+      border-style: solid;
+      border-color: #93c5fd;
+      background: #f8fbff;
+    }
+
+    .dropzone input[type="file"] {
+      display: none;
+    }
+
+    .dz-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .badge-a {
+      background: #ffe4e6;
+      color: #be123c;
+      padding: 2px 7px;
+      border-radius: 999px;
+    }
+
+    .badge-b {
+      background: #d1fae5;
+      color: #047857;
+      padding: 2px 7px;
+      border-radius: 999px;
+    }
+
+    .dz-placeholder {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .dz-filename {
+      font-weight: 600;
+      font-family: var(--mono);
+      font-size: 13px;
+      word-break: break-all;
+      color: var(--text);
+    }
+
+    .dz-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .parse-bar {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    .parse-bar label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    select, input[type="text"] {
+      font-family: inherit;
+      font-size: 13px;
+      padding: 5px 9px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    /* Columns selector */
+    .col-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .col-search {
+      width: 210px;
+    }
+
+    .col-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      max-height: 230px;
+      overflow-y: auto;
+      padding: 4px 2px;
+    }
+
+    .col-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      font-family: var(--mono);
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.12s;
+    }
+
+    .col-chip:hover {
+      border-color: var(--primary);
+    }
+
+    .col-chip.checked {
+      background: var(--primary-soft);
+      border-color: #93c5fd;
+      color: #1e3a8a;
+    }
+
+    .col-chip.unchecked {
+      background: var(--surface-muted);
+      border-color: var(--border);
+      color: var(--text-muted);
+      text-decoration: line-through;
+      opacity: 0.78;
+    }
+
+    .col-chip input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .col-tag {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 4px;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .tag-only-a { background: #ffe4e6; color: #be123c; }
+    .tag-only-b { background: #d1fae5; color: #047857; }
+    .tag-auto { background: #f1f5f9; color: #475569; }
+
+    .key-btn {
+      font-size: 11px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: none !important;
+      margin-left: 2px;
+    }
+
+    .key-btn:hover {
+      background: #fef3c7;
+      border-color: #fcd34d;
+      color: #92400e;
+    }
+
+    .key-btn.active {
+      background: #f59e0b;
+      border-color: #d97706;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    /* Options & Mode */
+    .options-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .mode-group {
+      display: inline-flex;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--surface-muted);
+    }
+
+    .mode-btn {
+      border: none;
+      border-right: 1px solid var(--border-strong);
+      border-radius: 0;
+      background: transparent;
+      padding: 7px 12px;
+      font-size: 12.5px;
+    }
+
+    .mode-btn:last-child { border-right: none; }
+
+    .mode-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .toggles-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    .toggles-group label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+
+    .key-hint {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: var(--warn-bg);
+      border: 1px solid var(--warn-border);
+      border-radius: 7px;
+      font-size: 12.5px;
+      color: #92400e;
+      display: none;
+    }
+
+    .key-hint.visible { display: block; }
+
+    /* Verdict Banner */
+    .verdict {
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+      border: 1px solid;
+    }
+
+    .verdict.match {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      color: #14532d;
+    }
+
+    .verdict.diff {
+      background: var(--danger-bg);
+      border-color: var(--danger-border);
+      color: #7f1d1d;
+    }
+
+    .verdict-title {
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .verdict-sub {
+      font-size: 13px;
+      opacity: 0.9;
+      margin-top: 2px;
+    }
+
+    .stats-grid {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stat-pill {
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(15, 23, 42, 0.1);
+      border-radius: 8px;
+      padding: 6px 12px;
+      min-width: 96px;
+      text-align: center;
+    }
+
+    .stat-pill .num {
+      font-size: 17px;
+      font-weight: 700;
+      font-family: var(--mono);
+      line-height: 1.2;
+    }
+
+    .stat-pill .lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Per-column diff summary */
+    .col-diff-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+
+    .col-diff-badge {
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      color: #92400e;
+      cursor: pointer;
+    }
+
+    .col-diff-badge.active {
+      background: #d97706;
+      color: #fff;
+      border-color: #b45309;
+    }
+
+    /* Results Table */
+    .results-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .filter-tabs {
+      display: inline-flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      font-size: 12.5px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+    }
+
+    .tab-btn.active {
+      background: var(--text);
+      color: #fff;
+      border-color: var(--text);
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 62vh;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12.5px;
+      font-family: var(--mono);
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f1f5f9;
+      border-bottom: 2px solid var(--border-strong);
+      border-right: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      white-space: nowrap;
+      font-weight: 700;
+      color: #334155;
+    }
+
+    thead th.ignored-col {
+      background: #f8fafc;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+
+    tbody td {
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      padding: 6px 10px;
+      white-space: nowrap;
+      max-width: 340px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: top;
+    }
+
+    tbody tr:hover td {
+      filter: brightness(0.97);
+    }
+
+    tbody tr.row-only-a td { background: var(--only-a-bg); }
+    tbody tr.row-only-b td { background: var(--only-b-bg); }
+    tbody tr.row-modified td { background: var(--mod-bg); }
+    tbody tr.row-matched td { background: #ffffff; }
+
+    td.ignored-col {
+      color: #94a3b8;
+      opacity: 0.7;
+    }
+
+    td.cell-diff {
+      background: var(--mod-cell-bg) !important;
+      white-space: normal;
+      min-width: 160px;
+    }
+
+    .diff-val-a {
+      display: block;
+      color: #be123c;
+      background: #ffe4e6;
+      padding: 1px 5px;
+      border-radius: 4px;
+      margin-bottom: 3px;
+      word-break: break-all;
+    }
+
+    .diff-val-b {
+      display: block;
+      color: #047857;
+      background: #d1fae5;
+      padding: 1px 5px;
+      border-radius: 4px;
+      word-break: break-all;
+    }
+
+    .empty-val {
+      color: #94a3b8;
+      font-style: italic;
+    }
+
+    .status-pill {
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      display: inline-block;
+      white-space: nowrap;
+    }
+
+    .st-only-a { background: #fecdd3; color: #9f1239; }
+    .st-only-b { background: #a7f3d0; color: #065f46; }
+    .st-mod { background: #fde68a; color: #92400e; }
+    .st-match { background: #e2e8f0; color: #475569; }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .page-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hidden { display: none !important; }
+
+    .notice {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e40af;
+    }
+
+    .notice.warn {
+      background: var(--warn-bg);
+      border-color: var(--warn-border);
+      color: #92400e;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 36px 20px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>CSV File Diff</h1>
+        <div class="subtitle">เทียบไฟล์ CSV/TSV แบบเลือกหรือติ๊กออกคอลัมน์ได้ (เช่น ID, CRT_TMS) — ประมวลผลในเบราว์เซอร์ 100% ไม่อัปโหลดข้อมูลออกนอกเครื่อง</div>
+      </div>
+      <div class="header-actions">
+        <button id="btnClearAll" type="button">ล้างทั้งหมด</button>
+      </div>
+    </header>
+
+    <!-- 1. File Upload -->
+    <section class="card">
+      <div class="upload-grid">
+        <div class="dropzone" id="dropA" tabindex="0">
+          <input type="file" id="fileA" accept=".csv,.tsv,.txt,text/csv,text/plain" />
+          <div class="dz-label"><span class="badge-a">ไฟล์ A (ต้นทาง / เดิม)</span></div>
+          <div id="infoA" class="dz-placeholder">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่ (.csv, .tsv, .txt)</div>
+        </div>
+
+        <div class="swap-wrap">
+          <button id="btnSwap" type="button" title="สลับไฟล์ A และ B">⇄ สลับ</button>
+        </div>
+
+        <div class="dropzone" id="dropB" tabindex="0">
+          <input type="file" id="fileB" accept=".csv,.tsv,.txt,text/csv,text/plain" />
+          <div class="dz-label"><span class="badge-b">ไฟล์ B (ปลายทาง / ใหม่)</span></div>
+          <div id="infoB" class="dz-placeholder">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่ (.csv, .tsv, .txt)</div>
+        </div>
+      </div>
+
+      <div class="parse-bar">
+        <label>
+          ตัวคั่น (Delimiter):
+          <select id="delimiterSelect">
+            <option value="auto" selected>ตรวจจับอัตโนมัติ (Auto)</option>
+            <option value=",">Comma (,)</option>
+            <option value="\t">Tab (\t)</option>
+            <option value=";">Semicolon (;)</option>
+            <option value="|">Pipe (|)</option>
+          </select>
+        </label>
+        <label>
+          <input type="checkbox" id="hasHeaderCheck" checked />
+          แถวแรกเป็นชื่อคอลัมน์ (Header)
+        </label>
+        <span id="detectedInfo" style="color: var(--text-muted); font-size: 12px;"></span>
+      </div>
+    </section>
+
+    <!-- 2. Column Selector & Options -->
+    <section class="card hidden" id="configSection">
+      <div class="card-title">
+        <span>เลือกคอลัมน์ที่ต้องการเทียบ (<span id="selectedCount">0</span> / <span id="totalColCount">0</span> คอลัมน์)</span>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="btn-sm btn-accent" id="btnAutoIgnore">ติ๊กออก ID &amp; Audit อัตโนมัติ</button>
+          <button type="button" class="btn-sm" id="btnSelectAll">เลือกทั้งหมด</button>
+          <button type="button" class="btn-sm" id="btnSelectNone">ไม่เลือกทั้งหมด</button>
+          <button type="button" class="btn-sm" id="btnSelectCommon">เฉพาะคอลัมน์ที่มีทั้ง 2 ไฟล์</button>
+        </div>
+      </div>
+
+      <div class="col-toolbar">
+        <input type="text" id="colSearch" class="col-search" placeholder="ค้นหาชื่อคอลัมน์..." />
+        <span style="font-size:12px; color:var(--text-muted);">
+          คลิกที่คอลัมน์เพื่อเลือก/เอาออก <span id="keyInstruction" class="hidden">• กดปุ่ม <strong>KEY</strong> เพื่อเลือกคีย์จับคู่แถว</span>
+        </span>
+      </div>
+
+      <div class="col-grid" id="colGrid"></div>
+
+      <div class="key-hint" id="keyHint">
+        กรุณากดปุ่ม <strong>KEY</strong> บนคอลัมน์อย่างน้อย 1 คอลัมน์ (เช่น <code>RC_CD</code>, <code>EFF_DT</code>) เพื่อใช้จับคู่แถวระหว่างไฟล์ A และ B
+      </div>
+
+      <div class="options-row">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-weight:600; font-size:13px;">โหมดเทียบ:</span>
+          <div class="mode-group" role="group">
+            <button type="button" class="mode-btn active" data-mode="multiset" title="ไม่สนลำดับบรรทัด (เหมาะกับ export จาก DB ที่ลำดับสลับกัน)">ไม่สนลำดับแถว</button>
+            <button type="button" class="mode-btn" data-mode="key" title="จับคู่แถวด้วย Key แล้วไฮไลต์ช่องที่ต่างกัน">จับคู่ตาม Key</button>
+            <button type="button" class="mode-btn" data-mode="positional" title="เทียบบรรทัดที่ 1 กับ 1, 2 กับ 2 ตามลำดับ">ตามลำดับบรรทัด</button>
+          </div>
+        </div>
+
+        <div class="toggles-group">
+          <label title="ตัดช่องว่างหน้า-หลังข้อความก่อนเทียบ">
+            <input type="checkbox" id="optTrim" /> Trim ช่องว่าง
+          </label>
+          <label title="ไม่สนใจตัวพิมพ์เล็ก-ใหญ่">
+            <input type="checkbox" id="optIgnoreCase" /> ไม่สนตัวพิมพ์เล็ก-ใหญ่
+          </label>
+          <label title="เช่น 8.46200000 เท่ากับ 8.462">
+            <input type="checkbox" id="optNumeric" /> เทียบตัวเลขตามค่า
+          </label>
+          <label title="มองค่าว่าง, null, NULL ว่าเหมือนกัน">
+            <input type="checkbox" id="optNullEmpty" /> ค่าว่าง = NULL
+          </label>
+          <button type="button" class="btn-primary" id="btnCompare">เปรียบเทียบ</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Results -->
+    <section class="hidden" id="resultSection">
+      <div id="schemaNotice" class="notice warn hidden"></div>
+      <div id="dupKeyNotice" class="notice warn hidden"></div>
+
+      <div class="verdict" id="verdictBanner">
+        <div>
+          <div class="verdict-title" id="verdictTitle"></div>
+          <div class="verdict-sub" id="verdictSub"></div>
+        </div>
+        <div class="stats-grid" id="statsGrid"></div>
+      </div>
+
+      <div class="card">
+        <div id="colDiffSummary" class="col-diff-summary hidden"></div>
+
+        <div class="results-toolbar">
+          <div class="filter-tabs" id="filterTabs">
+            <button type="button" class="tab-btn active" data-filter="diff">เฉพาะที่ต่าง (<span id="cntDiff">0</span>)</button>
+            <button type="button" class="tab-btn" data-filter="modified" id="tabModified">ค่าไม่ตรง (<span id="cntMod">0</span>)</button>
+            <button type="button" class="tab-btn" data-filter="onlyA">มีเฉพาะไฟล์ A (<span id="cntOnlyA">0</span>)</button>
+            <button type="button" class="tab-btn" data-filter="onlyB">มีเฉพาะไฟล์ B (<span id="cntOnlyB">0</span>)</button>
+            <button type="button" class="tab-btn" data-filter="matched">ตรงกัน (<span id="cntMatch">0</span>)</button>
+            <button type="button" class="tab-btn" data-filter="all">ทั้งหมด (<span id="cntAll">0</span>)</button>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <input type="text" id="rowSearch" placeholder="ค้นหาในผลลัพธ์..." style="width:190px;" />
+            <label style="display:inline-flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer;">
+              <input type="checkbox" id="optShowIgnored" /> แสดงคอลัมน์ที่ติ๊กออก
+            </label>
+            <button type="button" class="btn-sm" id="btnExportCsv">Export ผลต่าง (CSV)</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" id="tableWrap">
+          <table id="resultTable">
+            <thead id="resultHead"></thead>
+            <tbody id="resultBody"></tbody>
+          </table>
+        </div>
+
+        <div class="pagination" id="paginationBar">
+          <div id="pageInfo"></div>
+          <div class="page-controls">
+            <label style="font-size:12px;">
+              แสดงหน้าละ
+              <select id="pageSizeSelect">
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="250">250</option>
+                <option value="500">500</option>
+              </select>
+            </label>
+            <button type="button" class="btn-sm" id="btnPrevPage">← ก่อนหน้า</button>
+            <span id="pageNumLabel" style="font-family:var(--mono); font-size:12px;">1 / 1</span>
+            <button type="button" class="btn-sm" id="btnNextPage">ถัดไป →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ---------- State ----------
+      const state = {
+        rawA: null, // { name, size, text }
+        rawB: null,
+        parsedA: null, // { headers, rows, delimiter }
+        parsedB: null,
+        allColumns: [], // [{ name, inA, inB, idxA, idxB, checked, isKey, autoIgnored }]
+        mode: 'multiset', // 'multiset' | 'key' | 'positional'
+        diffRows: [], // [{ type: 'matched'|'modified'|'onlyA'|'onlyB', lineA, lineB, rowA, rowB, diffCols: Set }]
+        colDiffCounts: new Map(),
+        dupKeyCountA: 0,
+        dupKeyCountB: 0,
+        elapsedMs: 0,
+        filter: 'diff',
+        colFilter: null,
+        searchQuery: '',
+        page: 1,
+        pageSize: 100
+      };
+
+      const FIELD_SEP = '\u001F';
+      const ESC_SEP = '\u001E';
+
+      // Regex patterns for smart auto-ignore (surrogate PK IDs & audit timestamps/users)
+      const AUTO_IGNORE_PATTERNS = [
+        /^ID$/i,
+        /^EBAN_.*_ID$/i,
+        /^CRT_TMS$/i,
+        /^UDT_TMS$/i,
+        /^UPD_TMS$/i,
+        /^CRT_BY$/i,
+        /^UDT_BY$/i,
+        /^UPD_BY$/i,
+        /^CREATED_AT$/i,
+        /^UPDATED_AT$/i,
+        /^CREATED_BY$/i,
+        /^UPDATED_BY$/i,
+        /^CREATE_TMS$/i,
+        /^UPDATE_TMS$/i
+      ];
+
+      function isAutoIgnoreCol(colName) {
+        return AUTO_IGNORE_PATTERNS.some((re) => re.test(colName.trim()));
+      }
+
+      // ---------- DOM Elements ----------
+      const el = {
+        dropA: document.getElementById('dropA'),
+        dropB: document.getElementById('dropB'),
+        fileA: document.getElementById('fileA'),
+        fileB: document.getElementById('fileB'),
+        infoA: document.getElementById('infoA'),
+        infoB: document.getElementById('infoB'),
+        btnSwap: document.getElementById('btnSwap'),
+        btnClearAll: document.getElementById('btnClearAll'),
+        delimiterSelect: document.getElementById('delimiterSelect'),
+        hasHeaderCheck: document.getElementById('hasHeaderCheck'),
+        detectedInfo: document.getElementById('detectedInfo'),
+        configSection: document.getElementById('configSection'),
+        selectedCount: document.getElementById('selectedCount'),
+        totalColCount: document.getElementById('totalColCount'),
+        btnAutoIgnore: document.getElementById('btnAutoIgnore'),
+        btnSelectAll: document.getElementById('btnSelectAll'),
+        btnSelectNone: document.getElementById('btnSelectNone'),
+        btnSelectCommon: document.getElementById('btnSelectCommon'),
+        colSearch: document.getElementById('colSearch'),
+        keyInstruction: document.getElementById('keyInstruction'),
+        colGrid: document.getElementById('colGrid'),
+        keyHint: document.getElementById('keyHint'),
+        optTrim: document.getElementById('optTrim'),
+        optIgnoreCase: document.getElementById('optIgnoreCase'),
+        optNumeric: document.getElementById('optNumeric'),
+        optNullEmpty: document.getElementById('optNullEmpty'),
+        btnCompare: document.getElementById('btnCompare'),
+        resultSection: document.getElementById('resultSection'),
+        schemaNotice: document.getElementById('schemaNotice'),
+        dupKeyNotice: document.getElementById('dupKeyNotice'),
+        verdictBanner: document.getElementById('verdictBanner'),
+        verdictTitle: document.getElementById('verdictTitle'),
+        verdictSub: document.getElementById('verdictSub'),
+        statsGrid: document.getElementById('statsGrid'),
+        colDiffSummary: document.getElementById('colDiffSummary'),
+        filterTabs: document.getElementById('filterTabs'),
+        tabModified: document.getElementById('tabModified'),
+        cntDiff: document.getElementById('cntDiff'),
+        cntMod: document.getElementById('cntMod'),
+        cntOnlyA: document.getElementById('cntOnlyA'),
+        cntOnlyB: document.getElementById('cntOnlyB'),
+        cntMatch: document.getElementById('cntMatch'),
+        cntAll: document.getElementById('cntAll'),
+        rowSearch: document.getElementById('rowSearch'),
+        optShowIgnored: document.getElementById('optShowIgnored'),
+        btnExportCsv: document.getElementById('btnExportCsv'),
+        resultHead: document.getElementById('resultHead'),
+        resultBody: document.getElementById('resultBody'),
+        pageInfo: document.getElementById('pageInfo'),
+        pageSizeSelect: document.getElementById('pageSizeSelect'),
+        btnPrevPage: document.getElementById('btnPrevPage'),
+        btnNextPage: document.getElementById('btnNextPage'),
+        pageNumLabel: document.getElementById('pageNumLabel')
+      };
+
+      // ---------- Utilities ----------
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function formatBytes(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      }
+
+      function formatNum(n) {
+        return n.toLocaleString('en-US');
+      }
+
+      function debounce(fn, ms) {
+        let timer = null;
+        return (...args) => {
+          clearTimeout(timer);
+          timer = setTimeout(() => fn(...args), ms);
+        };
+      }
+
+      // ---------- Fast RFC-4180 CSV Parser ----------
+      function detectDelimiter(text) {
+        const sample = text.slice(0, 8192);
+        const firstLine = sample.split(/\r?\n/)[0] || '';
+        const candidates = [',', '\t', ';', '|'];
+        let best = ',';
+        let bestCount = -1;
+        for (const d of candidates) {
+          let count = 0;
+          let inQuote = false;
+          for (let i = 0; i < firstLine.length; i++) {
+            const ch = firstLine[i];
+            if (ch === '"') inQuote = !inQuote;
+            else if (!inQuote && ch === d) count++;
+          }
+          if (count > bestCount) {
+            bestCount = count;
+            best = d;
+          }
+        }
+        return bestCount > 0 ? best : ',';
+      }
+
+      function parseDelimited(rawText, delimiterOption, hasHeader) {
+        // Strip UTF-8 BOM if present
+        const text = rawText.charCodeAt(0) === 0xFEFF ? rawText.slice(1) : rawText;
+        const delimiter = delimiterOption === 'auto'
+          ? detectDelimiter(text)
+          : (delimiterOption === '\\t' ? '\t' : delimiterOption);
+
+        const rows = [];
+        let row = [];
+        let field = '';
+        let inQuotes = false;
+        const len = text.length;
+
+        for (let i = 0; i < len; i++) {
+          const ch = text[i];
+          if (inQuotes) {
+            if (ch === '"') {
+              if (i + 1 < len && text[i + 1] === '"') {
+                field += '"';
+                i++;
+              } else {
+                inQuotes = false;
+              }
+            } else {
+              field += ch;
+            }
+          } else {
+            if (ch === '"' && field.length === 0) {
+              inQuotes = true;
+            } else if (ch === delimiter) {
+              row.push(field);
+              field = '';
+            } else if (ch === '\r') {
+              row.push(field);
+              rows.push(row);
+              row = [];
+              field = '';
+              if (i + 1 < len && text[i + 1] === '\n') i++;
+            } else if (ch === '\n') {
+              row.push(field);
+              rows.push(row);
+              row = [];
+              field = '';
+            } else {
+              field += ch;
+            }
+          }
+        }
+
+        // Push final row unless EOF was just a trailing newline
+        if (field.length > 0 || row.length > 0) {
+          row.push(field);
+          rows.push(row);
+        }
+
+        // Remove trailing completely empty lines
+        while (rows.length > 0 && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === '') {
+          rows.pop();
+        }
+
+        let headers = [];
+        let dataRows = [];
+
+        if (rows.length === 0) {
+          return { headers: [], rows: [], delimiter };
+        }
+
+        if (hasHeader) {
+          headers = rows[0].map((h, idx) => {
+            const name = h.trim();
+            return name || `COL_${idx + 1}`;
+          });
+          // Deduplicate duplicate header names safely
+          const seen = new Map();
+          headers = headers.map((h) => {
+            const count = seen.get(h) || 0;
+            seen.set(h, count + 1);
+            return count === 0 ? h : `${h} (${count + 1})`;
+          });
+          dataRows = rows.slice(1);
+        } else {
+          const maxCols = rows.reduce((m, r) => Math.max(m, r.length), 0);
+          for (let c = 0; c < maxCols; c++) headers.push(`COL_${c + 1}`);
+          dataRows = rows;
+        }
+
+        return { headers, rows: dataRows, delimiter };
+      }
+
+      // ---------- File Handling ----------
+      function bindDropzone(dropEl, inputEl, side) {
+        dropEl.addEventListener('click', () => inputEl.click());
+        dropEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputEl.click();
+          }
+        });
+        inputEl.addEventListener('change', () => {
+          if (inputEl.files && inputEl.files[0]) loadFile(inputEl.files[0], side);
+        });
+        dropEl.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          dropEl.classList.add('dragover');
+        });
+        dropEl.addEventListener('dragleave', () => dropEl.classList.remove('dragover'));
+        dropEl.addEventListener('drop', (e) => {
+          e.preventDefault();
+          dropEl.classList.remove('dragover');
+          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            loadFile(e.dataTransfer.files[0], side);
+          }
+        });
+      }
+
+      function loadFile(file, side) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const payload = { name: file.name, size: file.size, text: String(reader.result || '') };
+          if (side === 'A') state.rawA = payload;
+          else state.rawB = payload;
+          reparseAndInit(true);
+        };
+        reader.readAsText(file, 'UTF-8');
+      }
+
+      function renderFileBox(side) {
+        const raw = side === 'A' ? state.rawA : state.rawB;
+        const parsed = side === 'A' ? state.parsedA : state.parsedB;
+        const dropEl = side === 'A' ? el.dropA : el.dropB;
+        const infoEl = side === 'A' ? el.infoA : el.infoB;
+
+        if (!raw) {
+          dropEl.classList.remove('loaded');
+          infoEl.className = 'dz-placeholder';
+          infoEl.innerHTML = 'คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่ (.csv, .tsv, .txt)';
+          return;
+        }
+        dropEl.classList.add('loaded');
+        infoEl.className = '';
+        const rowCnt = parsed ? formatNum(parsed.rows.length) : '-';
+        const colCnt = parsed ? formatNum(parsed.headers.length) : '-';
+        infoEl.innerHTML = `
+          <div class="dz-filename">${escapeHtml(raw.name)}</div>
+          <div class="dz-meta">
+            <span>ขนาด: <strong>${formatBytes(raw.size)}</strong></span>
+            <span>แถวข้อมูล: <strong>${rowCnt}</strong></span>
+            <span>คอลัมน์: <strong>${colCnt}</strong></span>
+          </div>
+        `;
+      }
+
+      function reparseAndInit(autoApplyIgnore) {
+        const delimOpt = el.delimiterSelect.value;
+        const hasHeader = el.hasHeaderCheck.checked;
+
+        state.parsedA = state.rawA ? parseDelimited(state.rawA.text, delimOpt, hasHeader) : null;
+        state.parsedB = state.rawB ? parseDelimited(state.rawB.text, delimOpt, hasHeader) : null;
+
+        renderFileBox('A');
+        renderFileBox('B');
+
+        const dName = (d) => (d === '\t' ? 'Tab (\\t)' : d === ',' ? 'Comma (,)' : `"${d}"`);
+        if (state.parsedA || state.parsedB) {
+          const parts = [];
+          if (state.parsedA) parts.push(`A: ${dName(state.parsedA.delimiter)}`);
+          if (state.parsedB) parts.push(`B: ${dName(state.parsedB.delimiter)}`);
+          el.detectedInfo.textContent = 'ตัวคั่นที่ใช้: ' + parts.join(' | ');
+        } else {
+          el.detectedInfo.textContent = '';
+        }
+
+        if (!state.parsedA || !state.parsedB) {
+          el.configSection.classList.add('hidden');
+          el.resultSection.classList.add('hidden');
+          return;
+        }
+
+        buildColumnList(autoApplyIgnore);
+        el.configSection.classList.remove('hidden');
+        runCompare();
+      }
+
+      function buildColumnList(autoApplyIgnore) {
+        const mapA = new Map();
+        state.parsedA.headers.forEach((h, i) => mapA.set(h, i));
+        const mapB = new Map();
+        state.parsedB.headers.forEach((h, i) => mapB.set(h, i));
+
+        // Preserve previous user choices if column names haven't changed
+        const prevMap = new Map();
+        state.allColumns.forEach((c) => prevMap.set(c.name, c));
+
+        const seen = new Set();
+        const merged = [];
+
+        const pushCol = (name) => {
+          if (seen.has(name)) return;
+          seen.add(name);
+          const inA = mapA.has(name);
+          const inB = mapB.has(name);
+          const autoIgn = isAutoIgnoreCol(name);
+          const prev = prevMap.get(name);
+          merged.push({
+            name,
+            inA,
+            inB,
+            idxA: inA ? mapA.get(name) : -1,
+            idxB: inB ? mapB.get(name) : -1,
+            checked: autoApplyIgnore ? !autoIgn : (prev ? prev.checked : !autoIgn),
+            isKey: prev ? prev.isKey : false,
+            autoIgnored: autoIgn
+          });
+        };
+
+        state.parsedA.headers.forEach(pushCol);
+        state.parsedB.headers.forEach(pushCol);
+
+        state.allColumns = merged;
+        renderColumnChips();
+      }
+
+      function renderColumnChips() {
+        const q = el.colSearch.value.trim().toLowerCase();
+        const isKeyMode = state.mode === 'key';
+        el.keyInstruction.classList.toggle('hidden', !isKeyMode);
+
+        let selectedCnt = 0;
+        const htmlParts = [];
+
+        state.allColumns.forEach((col, index) => {
+          if (col.checked) selectedCnt++;
+          if (q && !col.name.toLowerCase().includes(q)) return;
+
+          const cls = col.checked ? 'col-chip checked' : 'col-chip unchecked';
+          let tag = '';
+          if (col.inA && !col.inB) tag = '<span class="col-tag tag-only-a">A เท่านั้น</span>';
+          else if (!col.inA && col.inB) tag = '<span class="col-tag tag-only-b">B เท่านั้น</span>';
+          else if (col.autoIgnored && !col.checked) tag = '<span class="col-tag tag-auto">ID/Audit</span>';
+
+          const keyBtn = isKeyMode && col.inA && col.inB
+            ? `<button type="button" class="key-btn ${col.isKey ? 'active' : ''}" data-key-idx="${index}" title="ใช้คอลัมน์นี้เป็นคีย์จับคู่แถว">KEY</button>`
+            : '';
+
+          htmlParts.push(`
+            <label class="${cls}" data-col-idx="${index}">
+              <input type="checkbox" ${col.checked ? 'checked' : ''} data-chk-idx="${index}" />
+              <span>${escapeHtml(col.name)}</span>
+              ${tag}
+              ${keyBtn}
+            </label>
+          `);
+        });
+
+        el.colGrid.innerHTML = htmlParts.join('');
+        el.selectedCount.textContent = selectedCnt;
+        el.totalColCount.textContent = state.allColumns.length;
+
+        updateKeyHint();
+      }
+
+      function updateKeyHint() {
+        const hasKeys = state.allColumns.some((c) => c.isKey && c.inA && c.inB);
+        el.keyHint.classList.toggle('visible', state.mode === 'key' && !hasKeys);
+      }
+
+      // ---------- Normalization ----------
+      function makeNormalizer() {
+        const doTrim = el.optTrim.checked;
+        const doLower = el.optIgnoreCase.checked;
+        const doNum = el.optNumeric.checked;
+        const doNull = el.optNullEmpty.checked;
+
+        return function norm(val) {
+          let s = val === undefined || val === null ? '' : String(val);
+          if (doTrim) s = s.trim();
+          if (doNull) {
+            const low = s.trim().toLowerCase();
+            if (low === '' || low === 'null' || low === '\\n') return '';
+          }
+          if (doNum && s !== '') {
+            // Only normalize pure decimal/integer numbers (avoid turning leading-zero codes like "00010" into "10" unless it has a decimal point or is strictly numeric without leading zero)
+            const trimmed = s.trim();
+            if (/^-?(0|[1-9]\d*)(\.\d+)?$/.test(trimmed)) {
+              const num = Number(trimmed);
+              if (Number.isFinite(num)) return String(num);
+            }
+          }
+          if (doLower) s = s.toLowerCase();
+          return s;
+        };
+      }
+
+      function escapeSep(s) {
+        return s.indexOf(FIELD_SEP) === -1 && s.indexOf(ESC_SEP) === -1
+          ? s
+          : s.replaceAll(ESC_SEP, ESC_SEP + ESC_SEP).replaceAll(FIELD_SEP, ESC_SEP + 'F');
+      }
+
+      function buildSignature(row, cols, side, norm) {
+        const parts = new Array(cols.length);
+        for (let i = 0; i < cols.length; i++) {
+          const idx = side === 'A' ? cols[i].idxA : cols[i].idxB;
+          const raw = idx >= 0 ? (row[idx] ?? '') : '';
+          parts[i] = escapeSep(norm(raw));
+        }
+        return parts.join(FIELD_SEP);
+      }
+
+      // ---------- Comparison Engine ----------
+      function runCompare() {
+        if (!state.parsedA || !state.parsedB) return;
+
+        const selectedCols = state.allColumns.filter((c) => c.checked);
+        const keyCols = state.allColumns.filter((c) => c.isKey && c.inA && c.inB);
+
+        if (state.mode === 'key' && keyCols.length === 0) {
+          updateKeyHint();
+          el.resultSection.classList.add('hidden');
+          return;
+        }
+
+        if (selectedCols.length === 0) {
+          el.resultSection.classList.remove('hidden');
+          el.verdictBanner.className = 'verdict diff';
+          el.verdictTitle.textContent = '⚠️ ยังไม่ได้เลือกคอลัมน์สำหรับเทียบ';
+          el.verdictSub.textContent = 'กรุณาติ๊กเลือกอย่างน้อย 1 คอลัมน์ด้านบน';
+          el.statsGrid.innerHTML = '';
+          el.resultHead.innerHTML = '';
+          el.resultBody.innerHTML = '';
+          return;
+        }
+
+        const t0 = performance.now();
+        const norm = makeNormalizer();
+        const rowsA = state.parsedA.rows;
+        const rowsB = state.parsedB.rows;
+        const lineOffset = el.hasHeaderCheck.checked ? 2 : 1;
+
+        const diffRows = [];
+        const colDiffCounts = new Map();
+        state.dupKeyCountA = 0;
+        state.dupKeyCountB = 0;
+
+        if (state.mode === 'multiset') {
+          const mapA = new Map();
+          for (let i = 0; i < rowsA.length; i++) {
+            const sig = buildSignature(rowsA[i], selectedCols, 'A', norm);
+            let list = mapA.get(sig);
+            if (!list) { list = []; mapA.set(sig, list); }
+            list.push(i);
+          }
+
+          const mapB = new Map();
+          for (let i = 0; i < rowsB.length; i++) {
+            const sig = buildSignature(rowsB[i], selectedCols, 'B', norm);
+            let list = mapB.get(sig);
+            if (!list) { list = []; mapB.set(sig, list); }
+            list.push(i);
+          }
+
+          // Process all signatures in A
+          for (const [sig, listA] of mapA.entries()) {
+            const listB = mapB.get(sig);
+            if (listB) {
+              const matchCnt = Math.min(listA.length, listB.length);
+              for (let k = 0; k < matchCnt; k++) {
+                diffRows.push({
+                  type: 'matched',
+                  lineA: listA[k] + lineOffset,
+                  lineB: listB[k] + lineOffset,
+                  rowA: rowsA[listA[k]],
+                  rowB: rowsB[listB[k]],
+                  diffCols: null
+                });
+              }
+              for (let k = matchCnt; k < listA.length; k++) {
+                diffRows.push({
+                  type: 'onlyA',
+                  lineA: listA[k] + lineOffset,
+                  lineB: null,
+                  rowA: rowsA[listA[k]],
+                  rowB: null,
+                  diffCols: null
+                });
+              }
+              for (let k = matchCnt; k < listB.length; k++) {
+                diffRows.push({
+                  type: 'onlyB',
+                  lineA: null,
+                  lineB: listB[k] + lineOffset,
+                  rowA: null,
+                  rowB: rowsB[listB[k]],
+                  diffCols: null
+                });
+              }
+              mapB.delete(sig);
+            } else {
+              for (let k = 0; k < listA.length; k++) {
+                diffRows.push({
+                  type: 'onlyA',
+                  lineA: listA[k] + lineOffset,
+                  lineB: null,
+                  rowA: rowsA[listA[k]],
+                  rowB: null,
+                  diffCols: null
+                });
+              }
+            }
+          }
+
+          // Remaining signatures only in B
+          for (const listB of mapB.values()) {
+            for (let k = 0; k < listB.length; k++) {
+              diffRows.push({
+                type: 'onlyB',
+                lineA: null,
+                lineB: listB[k] + lineOffset,
+                rowA: null,
+                rowB: rowsB[listB[k]],
+                diffCols: null
+              });
+            }
+          }
+        } else if (state.mode === 'key') {
+          const mapA = new Map();
+          for (let i = 0; i < rowsA.length; i++) {
+            const ksig = buildSignature(rowsA[i], keyCols, 'A', norm);
+            let list = mapA.get(ksig);
+            if (!list) { list = []; mapA.set(ksig, list); }
+            list.push(i);
+          }
+
+          const mapB = new Map();
+          for (let i = 0; i < rowsB.length; i++) {
+            const ksig = buildSignature(rowsB[i], keyCols, 'B', norm);
+            let list = mapB.get(ksig);
+            if (!list) { list = []; mapB.set(ksig, list); }
+            list.push(i);
+          }
+
+          for (const list of mapA.values()) if (list.length > 1) state.dupKeyCountA += list.length - 1;
+          for (const list of mapB.values()) if (list.length > 1) state.dupKeyCountB += list.length - 1;
+
+          for (const [ksig, listA] of mapA.entries()) {
+            const listB = mapB.get(ksig);
+            if (listB) {
+              const pairCnt = Math.min(listA.length, listB.length);
+              for (let k = 0; k < pairCnt; k++) {
+                const rA = rowsA[listA[k]];
+                const rB = rowsB[listB[k]];
+                const dCols = compareRowPair(rA, rB, selectedCols, norm, colDiffCounts);
+                diffRows.push({
+                  type: dCols.size === 0 ? 'matched' : 'modified',
+                  lineA: listA[k] + lineOffset,
+                  lineB: listB[k] + lineOffset,
+                  rowA: rA,
+                  rowB: rB,
+                  diffCols: dCols
+                });
+              }
+              for (let k = pairCnt; k < listA.length; k++) {
+                diffRows.push({
+                  type: 'onlyA',
+                  lineA: listA[k] + lineOffset,
+                  lineB: null,
+                  rowA: rowsA[listA[k]],
+                  rowB: null,
+                  diffCols: null
+                });
+              }
+              for (let k = pairCnt; k < listB.length; k++) {
+                diffRows.push({
+                  type: 'onlyB',
+                  lineA: null,
+                  lineB: listB[k] + lineOffset,
+                  rowA: null,
+                  rowB: rowsB[listB[k]],
+                  diffCols: null
+                });
+              }
+              mapB.delete(ksig);
+            } else {
+              for (let k = 0; k < listA.length; k++) {
+                diffRows.push({
+                  type: 'onlyA',
+                  lineA: listA[k] + lineOffset,
+                  lineB: null,
+                  rowA: rowsA[listA[k]],
+                  rowB: null,
+                  diffCols: null
+                });
+              }
+            }
+          }
+
+          for (const listB of mapB.values()) {
+            for (let k = 0; k < listB.length; k++) {
+              diffRows.push({
+                type: 'onlyB',
+                lineA: null,
+                lineB: listB[k] + lineOffset,
+                rowA: null,
+                rowB: rowsB[listB[k]],
+                diffCols: null
+              });
+            }
+          }
+        } else {
+          // Positional (Row-by-row)
+          const maxLen = Math.max(rowsA.length, rowsB.length);
+          for (let i = 0; i < maxLen; i++) {
+            const rA = i < rowsA.length ? rowsA[i] : null;
+            const rB = i < rowsB.length ? rowsB[i] : null;
+            if (rA && rB) {
+              const dCols = compareRowPair(rA, rB, selectedCols, norm, colDiffCounts);
+              diffRows.push({
+                type: dCols.size === 0 ? 'matched' : 'modified',
+                lineA: i + lineOffset,
+                lineB: i + lineOffset,
+                rowA: rA,
+                rowB: rB,
+                diffCols: dCols
+              });
+            } else if (rA) {
+              diffRows.push({ type: 'onlyA', lineA: i + lineOffset, lineB: null, rowA: rA, rowB: null, diffCols: null });
+            } else {
+              diffRows.push({ type: 'onlyB', lineA: null, lineB: i + lineOffset, rowA: null, rowB: rB, diffCols: null });
+            }
+          }
+        }
+
+        state.diffRows = diffRows;
+        state.colDiffCounts = colDiffCounts;
+        state.elapsedMs = Math.round(performance.now() - t0);
+        state.colFilter = null;
+        state.page = 1;
+
+        renderResults();
+      }
+
+      function compareRowPair(rowA, rowB, selectedCols, norm, colDiffCounts) {
+        const diffCols = new Set();
+        for (let i = 0; i < selectedCols.length; i++) {
+          const col = selectedCols[i];
+          const vA = col.idxA >= 0 ? (rowA[col.idxA] ?? '') : '';
+          const vB = col.idxB >= 0 ? (rowB[col.idxB] ?? '') : '';
+          if (norm(vA) !== norm(vB)) {
+            diffCols.add(col.name);
+            colDiffCounts.set(col.name, (colDiffCounts.get(col.name) || 0) + 1);
+          }
+        }
+        return diffCols;
+      }
+
+      // ---------- Render Results ----------
+      function renderResults() {
+        el.resultSection.classList.remove('hidden');
+
+        // Schema mismatch notice
+        const onlyACols = state.allColumns.filter((c) => c.inA && !c.inB).map((c) => c.name);
+        const onlyBCols = state.allColumns.filter((c) => !c.inA && c.inB).map((c) => c.name);
+        if (onlyACols.length > 0 || onlyBCols.length > 0) {
+          const msgs = [];
+          if (onlyACols.length) msgs.push(`มีเฉพาะไฟล์ A: <code>${escapeHtml(onlyACols.join(', '))}</code>`);
+          if (onlyBCols.length) msgs.push(`มีเฉพาะไฟล์ B: <code>${escapeHtml(onlyBCols.join(', '))}</code>`);
+          el.schemaNotice.innerHTML = '⚠️ <strong>ชื่อคอลัมน์ของ 2 ไฟล์ไม่ตรงกันทั้งหมด:</strong> ' + msgs.join(' • ');
+          el.schemaNotice.classList.remove('hidden');
+        } else {
+          el.schemaNotice.classList.add('hidden');
+        }
+
+        // Duplicate key notice
+        if (state.mode === 'key' && (state.dupKeyCountA > 0 || state.dupKeyCountB > 0)) {
+          el.dupKeyNotice.innerHTML = `⚠️ <strong>พบ Key ซ้ำในไฟล์:</strong> ไฟล์ A ซ้ำ ${formatNum(state.dupKeyCountA)} แถว, ไฟล์ B ซ้ำ ${formatNum(state.dupKeyCountB)} แถว — แนะนำให้เพิ่มคอลัมน์ Key เพื่อให้คีย์ไม่ซ้ำกัน`;
+          el.dupKeyNotice.classList.remove('hidden');
+        } else {
+          el.dupKeyNotice.classList.add('hidden');
+        }
+
+        // Counts
+        let matched = 0, modified = 0, onlyA = 0, onlyB = 0;
+        for (const r of state.diffRows) {
+          if (r.type === 'matched') matched++;
+          else if (r.type === 'modified') modified++;
+          else if (r.type === 'onlyA') onlyA++;
+          else if (r.type === 'onlyB') onlyB++;
+        }
+        const totalDiff = modified + onlyA + onlyB;
+        const selectedCount = state.allColumns.filter((c) => c.checked).length;
+        const ignoredCount = state.allColumns.length - selectedCount;
+
+        // Verdict banner
+        const isPerfect = totalDiff === 0;
+        el.verdictBanner.className = 'verdict ' + (isPerfect ? 'match' : 'diff');
+        el.verdictTitle.textContent = isPerfect
+          ? '✅ ข้อมูลเหมือนกันทุกประการ (100% MATCH)'
+          : `❌ พบความแตกต่าง ${formatNum(totalDiff)} รายการ`;
+
+        const modeLabel = state.mode === 'multiset'
+          ? 'ไม่สนลำดับแถว'
+          : state.mode === 'key'
+            ? 'จับคู่ตาม Key (' + state.allColumns.filter((c) => c.isKey).map((c) => c.name).join(', ') + ')'
+            : 'ตามลำดับบรรทัด';
+
+        el.verdictSub.textContent = `เทียบ ${selectedCount} คอลัมน์ (ข้าม ${ignoredCount} คอลัมน์) • โหมด: ${modeLabel} • ใช้เวลา ${state.elapsedMs} ms`;
+
+        el.statsGrid.innerHTML = `
+          <div class="stat-pill"><div class="num">${formatNum(state.parsedA.rows.length)}</div><div class="lbl">แถวไฟล์ A</div></div>
+          <div class="stat-pill"><div class="num">${formatNum(state.parsedB.rows.length)}</div><div class="lbl">แถวไฟล์ B</div></div>
+          <div class="stat-pill"><div class="num" style="color:var(--success);">${formatNum(matched)}</div><div class="lbl">ตรงกัน</div></div>
+          ${state.mode !== 'multiset' ? `<div class="stat-pill"><div class="num" style="color:var(--warn);">${formatNum(modified)}</div><div class="lbl">ค่าไม่ตรง</div></div>` : ''}
+          <div class="stat-pill"><div class="num" style="color:var(--only-a-text);">${formatNum(onlyA)}</div><div class="lbl">เฉพาะ A</div></div>
+          <div class="stat-pill"><div class="num" style="color:var(--only-b-text);">${formatNum(onlyB)}</div><div class="lbl">เฉพาะ B</div></div>
+        `;
+
+        // Update filter tabs
+        el.cntDiff.textContent = formatNum(totalDiff);
+        el.cntMod.textContent = formatNum(modified);
+        el.cntOnlyA.textContent = formatNum(onlyA);
+        el.cntOnlyB.textContent = formatNum(onlyB);
+        el.cntMatch.textContent = formatNum(matched);
+        el.cntAll.textContent = formatNum(state.diffRows.length);
+        el.tabModified.classList.toggle('hidden', state.mode === 'multiset');
+
+        // If 100% match and currently on 'diff', switch to 'matched' automatically? Keep 'diff' clear or show friendly message.
+        if (state.filter === 'modified' && state.mode === 'multiset') {
+          state.filter = 'diff';
+        }
+        syncFilterTabUI();
+
+        // Per-column diff summary
+        if (state.colDiffCounts.size > 0) {
+          const sorted = [...state.colDiffCounts.entries()].sort((a, b) => b[1] - a[1]);
+          el.colDiffSummary.innerHTML =
+            '<span style="font-size:12px; font-weight:600; color:var(--text-muted);">คอลัมน์ที่พบค่าต่าง (คลิกเพื่อกรอง):</span>' +
+            sorted.map(([col, cnt]) =>
+              `<button type="button" class="col-diff-badge ${state.colFilter === col ? 'active' : ''}" data-diff-col="${escapeHtml(col)}">${escapeHtml(col)}: ${formatNum(cnt)}</button>`
+            ).join('') +
+            (state.colFilter ? '<button type="button" class="btn-sm" id="btnClearColFilter">ล้างตัวกรองคอลัมน์</button>' : '');
+          el.colDiffSummary.classList.remove('hidden');
+        } else {
+          el.colDiffSummary.classList.add('hidden');
+          el.colDiffSummary.innerHTML = '';
+        }
+
+        renderTable();
+      }
+
+      function syncFilterTabUI() {
+        el.filterTabs.querySelectorAll('.tab-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.filter === state.filter);
+        });
+      }
+
+      function getFilteredRows() {
+        const q = state.searchQuery.trim().toLowerCase();
+        const showIgnored = el.optShowIgnored.checked;
+        const visibleCols = showIgnored ? state.allColumns : state.allColumns.filter((c) => c.checked);
+
+        return state.diffRows.filter((item) => {
+          if (state.filter === 'diff' && item.type === 'matched') return false;
+          if (state.filter === 'modified' && item.type !== 'modified') return false;
+          if (state.filter === 'onlyA' && item.type !== 'onlyA') return false;
+          if (state.filter === 'onlyB' && item.type !== 'onlyB') return false;
+          if (state.filter === 'matched' && item.type !== 'matched') return false;
+
+          if (state.colFilter) {
+            if (!item.diffCols || !item.diffCols.has(state.colFilter)) return false;
+          }
+
+          if (q) {
+            for (let i = 0; i < visibleCols.length; i++) {
+              const col = visibleCols[i];
+              if (item.rowA && col.idxA >= 0) {
+                const v = item.rowA[col.idxA];
+                if (v && String(v).toLowerCase().includes(q)) return true;
+              }
+              if (item.rowB && col.idxB >= 0) {
+                const v = item.rowB[col.idxB];
+                if (v && String(v).toLowerCase().includes(q)) return true;
+              }
+            }
+            return false;
+          }
+          return true;
+        });
+      }
+
+      function renderTable() {
+        const showIgnored = el.optShowIgnored.checked;
+        const visibleCols = showIgnored ? state.allColumns : state.allColumns.filter((c) => c.checked);
+
+        // Header
+        const headHtml = [
+          '<tr>',
+          '<th>สถานะ</th>',
+          '<th>บรรทัด A</th>',
+          '<th>บรรทัด B</th>',
+          ...visibleCols.map((c) => {
+            const cls = c.checked ? '' : ' class="ignored-col"';
+            const keyMark = (state.mode === 'key' && c.isKey) ? '🔑 ' : '';
+            return `<th${cls}>${keyMark}${escapeHtml(c.name)}</th>`;
+          }),
+          '</tr>'
+        ].join('');
+        el.resultHead.innerHTML = headHtml;
+
+        const filtered = getFilteredRows();
+        const total = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+        if (state.page > totalPages) state.page = totalPages;
+
+        const startIdx = (state.page - 1) * state.pageSize;
+        const endIdx = Math.min(total, startIdx + state.pageSize);
+        const slice = filtered.slice(startIdx, endIdx);
+
+        if (slice.length === 0) {
+          const msg = state.filter === 'diff' && state.diffRows.length > 0 && !state.searchQuery
+            ? '🎉 ไม่พบความแตกต่าง! ลองกดแท็บ "ตรงกัน" เพื่อดูข้อมูลที่เปรียบเทียบแล้ว'
+            : 'ไม่พบข้อมูลตามเงื่อนไขที่กรอง';
+          el.resultBody.innerHTML = `<tr><td colspan="${visibleCols.length + 3}" class="empty-state">${msg}</td></tr>`;
+        } else {
+          const rowsHtml = slice.map((item) => {
+            const rowCls = item.type === 'onlyA' ? 'row-only-a'
+              : item.type === 'onlyB' ? 'row-only-b'
+                : item.type === 'modified' ? 'row-modified'
+                  : 'row-matched';
+
+            const statusBadge = item.type === 'onlyA'
+              ? '<span class="status-pill st-only-a">เฉพาะ A</span>'
+              : item.type === 'onlyB'
+                ? '<span class="status-pill st-only-b">เฉพาะ B</span>'
+                : item.type === 'modified'
+                  ? '<span class="status-pill st-mod">ค่าไม่ตรง</span>'
+                  : '<span class="status-pill st-match">ตรงกัน</span>';
+
+            const cells = visibleCols.map((col) => {
+              const ignCls = col.checked ? '' : ' ignored-col';
+              const vA = item.rowA && col.idxA >= 0 ? (item.rowA[col.idxA] ?? '') : '';
+              const vB = item.rowB && col.idxB >= 0 ? (item.rowB[col.idxB] ?? '') : '';
+
+              if (item.type === 'modified' && item.diffCols && item.diffCols.has(col.name)) {
+                const dispA = vA === '' ? '<span class="empty-val">(ว่าง)</span>' : escapeHtml(vA);
+                const dispB = vB === '' ? '<span class="empty-val">(ว่าง)</span>' : escapeHtml(vB);
+                return `<td class="cell-diff" title="A: ${escapeHtml(vA)}&#10;B: ${escapeHtml(vB)}">
+                  <span class="diff-val-a">A: ${dispA}</span>
+                  <span class="diff-val-b">B: ${dispB}</span>
+                </td>`;
+              }
+
+              // For ignored columns in matched/modified rows, show both if different
+              if (!col.checked && item.rowA && item.rowB && vA !== vB) {
+                const txt = `${vA} ≠ ${vB}`;
+                return `<td class="ignored-col" title="A: ${escapeHtml(vA)} | B: ${escapeHtml(vB)}">${escapeHtml(txt)}</td>`;
+              }
+
+              const val = item.type === 'onlyB' ? vB : vA;
+              const disp = val === '' ? '<span class="empty-val">(ว่าง)</span>' : escapeHtml(val);
+              return `<td class="${ignCls.trim()}" title="${escapeHtml(val)}">${disp}</td>`;
+            }).join('');
+
+            return `<tr class="${rowCls}">
+              <td>${statusBadge}</td>
+              <td>${item.lineA ?? '-'}</td>
+              <td>${item.lineB ?? '-'}</td>
+              ${cells}
+            </tr>`;
+          }).join('');
+
+          el.resultBody.innerHTML = rowsHtml;
+        }
+
+        // Pagination UI
+        el.pageInfo.textContent = total === 0
+          ? 'แสดง 0 รายการ'
+          : `แสดง ${formatNum(startIdx + 1)}–${formatNum(endIdx)} จาก ${formatNum(total)} รายการ`;
+        el.pageNumLabel.textContent = `${state.page} / ${totalPages}`;
+        el.btnPrevPage.disabled = state.page <= 1;
+        el.btnNextPage.disabled = state.page >= totalPages;
+      }
+
+      // ---------- Export Diff CSV ----------
+      function csvCell(v) {
+        const s = v === null || v === undefined ? '' : String(v);
+        if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+        return s;
+      }
+
+      function exportDiffCsv() {
+        const diffOnly = state.diffRows.filter((r) => r.type !== 'matched');
+        if (diffOnly.length === 0) {
+          alert('ไม่มีรายการที่แตกต่างสำหรับ Export (ข้อมูลตรงกัน 100%)');
+          return;
+        }
+        const showIgnored = el.optShowIgnored.checked;
+        const cols = showIgnored ? state.allColumns : state.allColumns.filter((c) => c.checked);
+
+        const lines = [];
+        const header = ['STATUS', 'LINE_A', 'LINE_B', 'DIFF_COLUMNS', ...cols.map((c) => c.name)];
+        lines.push(header.map(csvCell).join(','));
+
+        for (const item of diffOnly) {
+          const status = item.type === 'onlyA' ? 'ONLY_IN_A'
+            : item.type === 'onlyB' ? 'ONLY_IN_B'
+              : 'MODIFIED';
+          const diffColNames = item.diffCols ? [...item.diffCols].join('|') : '';
+
+          const values = cols.map((col) => {
+            const vA = item.rowA && col.idxA >= 0 ? (item.rowA[col.idxA] ?? '') : '';
+            const vB = item.rowB && col.idxB >= 0 ? (item.rowB[col.idxB] ?? '') : '';
+            if (item.type === 'modified' && item.diffCols && item.diffCols.has(col.name)) {
+              return `A:[${vA}] -> B:[${vB}]`;
+            }
+            return item.type === 'onlyB' ? vB : vA;
+          });
+
+          lines.push([status, item.lineA ?? '', item.lineB ?? '', diffColNames, ...values].map(csvCell).join(','));
+        }
+
+        // Prepend UTF-8 BOM so Excel displays Thai characters properly
+        const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'csv-diff-report.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      // ---------- Event Listeners ----------
+      bindDropzone(el.dropA, el.fileA, 'A');
+      bindDropzone(el.dropB, el.fileB, 'B');
+
+      el.btnSwap.addEventListener('click', () => {
+        const tmpRaw = state.rawA;
+        state.rawA = state.rawB;
+        state.rawB = tmpRaw;
+        reparseAndInit(false);
+      });
+
+      el.btnClearAll.addEventListener('click', () => {
+        state.rawA = null;
+        state.rawB = null;
+        state.parsedA = null;
+        state.parsedB = null;
+        state.allColumns = [];
+        state.diffRows = [];
+        el.fileA.value = '';
+        el.fileB.value = '';
+        el.colSearch.value = '';
+        el.rowSearch.value = '';
+        renderFileBox('A');
+        renderFileBox('B');
+        el.detectedInfo.textContent = '';
+        el.configSection.classList.add('hidden');
+        el.resultSection.classList.add('hidden');
+      });
+
+      el.delimiterSelect.addEventListener('change', () => reparseAndInit(false));
+      el.hasHeaderCheck.addEventListener('change', () => reparseAndInit(true));
+
+      const debouncedCompare = debounce(() => runCompare(), 120);
+
+      // Column chip clicks (event delegation)
+      el.colGrid.addEventListener('click', (e) => {
+        const keyBtn = e.target.closest('.key-btn');
+        if (keyBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          const idx = Number(keyBtn.dataset.keyIdx);
+          state.allColumns[idx].isKey = !state.allColumns[idx].isKey;
+          renderColumnChips();
+          debouncedCompare();
+          return;
+        }
+      });
+
+      el.colGrid.addEventListener('change', (e) => {
+        const chk = e.target.closest('input[data-chk-idx]');
+        if (!chk) return;
+        const idx = Number(chk.dataset.chkIdx);
+        state.allColumns[idx].checked = chk.checked;
+        renderColumnChips();
+        debouncedCompare();
+      });
+
+      el.colSearch.addEventListener('input', () => renderColumnChips());
+
+      el.btnAutoIgnore.addEventListener('click', () => {
+        state.allColumns.forEach((c) => {
+          c.checked = !c.autoIgnored;
+        });
+        renderColumnChips();
+        runCompare();
+      });
+
+      el.btnSelectAll.addEventListener('click', () => {
+        state.allColumns.forEach((c) => { c.checked = true; });
+        renderColumnChips();
+        runCompare();
+      });
+
+      el.btnSelectNone.addEventListener('click', () => {
+        state.allColumns.forEach((c) => { c.checked = false; });
+        renderColumnChips();
+        runCompare();
+      });
+
+      el.btnSelectCommon.addEventListener('click', () => {
+        state.allColumns.forEach((c) => { c.checked = c.inA && c.inB && !c.autoIgnored; });
+        renderColumnChips();
+        runCompare();
+      });
+
+      // Mode buttons
+      document.querySelectorAll('.mode-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.mode = btn.dataset.mode;
+          document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
+          renderColumnChips();
+          runCompare();
+        });
+      });
+
+      // Comparison toggles
+      [el.optTrim, el.optIgnoreCase, el.optNumeric, el.optNullEmpty].forEach((chk) => {
+        chk.addEventListener('change', () => runCompare());
+      });
+
+      el.btnCompare.addEventListener('click', () => runCompare());
+
+      // Filter tabs
+      el.filterTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab-btn');
+        if (!btn) return;
+        state.filter = btn.dataset.filter;
+        state.page = 1;
+        syncFilterTabUI();
+        renderTable();
+      });
+
+      // Per-column diff badge filter
+      el.colDiffSummary.addEventListener('click', (e) => {
+        if (e.target.id === 'btnClearColFilter') {
+          state.colFilter = null;
+          state.page = 1;
+          renderResults();
+          return;
+        }
+        const badge = e.target.closest('.col-diff-badge');
+        if (!badge) return;
+        const col = badge.dataset.diffCol;
+        state.colFilter = state.colFilter === col ? null : col;
+        state.filter = 'modified';
+        state.page = 1;
+        renderResults();
+      });
+
+      el.rowSearch.addEventListener('input', debounce(() => {
+        state.searchQuery = el.rowSearch.value;
+        state.page = 1;
+        renderTable();
+      }, 180));
+
+      el.optShowIgnored.addEventListener('change', () => renderTable());
+      el.btnExportCsv.addEventListener('click', () => exportDiffCsv());
+
+      // Pagination
+      el.pageSizeSelect.addEventListener('change', () => {
+        state.pageSize = Number(el.pageSizeSelect.value);
+        state.page = 1;
+        renderTable();
+      });
+      el.btnPrevPage.addEventListener('click', () => {
+        if (state.page > 1) { state.page--; renderTable(); }
+      });
+      el.btnNextPage.addEventListener('click', () => {
+        state.page++;
+        renderTable();
+      });
+    })();
+  </script>
+</body>
+</html>
